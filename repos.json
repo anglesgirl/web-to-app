@@ -29,7 +29,7 @@
   {
     "name": "LogSleuth",
     "description": "Root-free Android logcat viewer & embeddable zero-permission logging SDK",
-    "stargazers_count": 23,
+    "stargazers_count": 24,
     "forks_count": 0,
     "language": "Kotlin",
     "pushed_at": "2026-10-13T15:36:12Z",
@@ -176,7 +176,7 @@
     "stargazers_count": 11,
     "forks_count": 0,
     "language": "Python",
-    "pushed_at": "2026-10-13T23:33:49Z",
+    "pushed_at": "2026-10-14T05:55:08Z",
     "html_url": "https://github.com/shiaho777/pyj-j"
   },
   {
@@ -250,6 +250,15 @@
     "language": "Kotlin",
     "pushed_at": "2026-09-10T05:36:50Z",
     "html_url": "https://github.com/shiaho777/charter"
+  },
+  {
+    "name": "nixiang",
+    "description": "Rusted Warfare v1.15 逆向分析 + 改包 + 联机工具（phantom/relay）",
+    "stargazers_count": 0,
+    "forks_count": 0,
+    "language": "Smali",
+    "pushed_at": "2026-10-14T04:16:44Z",
+    "html_url": "https://github.com/shiaho777/nixiang"
   },
   {
     "name": "float-web",
