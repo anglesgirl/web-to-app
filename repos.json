@@ -30,7 +30,7 @@
     "name": "LogSleuth",
     "description": "Root-free Android logcat viewer & embeddable zero-permission logging SDK",
     "stargazers_count": 27,
-    "forks_count": 1,
+    "forks_count": 2,
     "language": "Kotlin",
     "pushed_at": "2026-10-17T08:48:00Z",
     "html_url": "https://github.com/shiaho777/LogSleuth"
@@ -54,6 +54,15 @@
     "html_url": "https://github.com/shiaho777/qsyy"
   },
   {
+    "name": "andmx",
+    "description": "Android-native AI coding agent (AndMX)",
+    "stargazers_count": 20,
+    "forks_count": 4,
+    "language": "Kotlin",
+    "pushed_at": "2026-09-27T13:43:57Z",
+    "html_url": "https://github.com/shiaho777/andmx"
+  },
+  {
     "name": "revx",
     "description": "Rust reverse-engineering toolkit with CLI and local MCP server.",
     "stargazers_count": 19,
@@ -61,15 +70,6 @@
     "language": "Rust",
     "pushed_at": "2026-10-17T09:27:24Z",
     "html_url": "https://github.com/shiaho777/revx"
-  },
-  {
-    "name": "andmx",
-    "description": "Android-native AI coding agent (AndMX)",
-    "stargazers_count": 19,
-    "forks_count": 4,
-    "language": "Kotlin",
-    "pushed_at": "2026-09-27T13:43:57Z",
-    "html_url": "https://github.com/shiaho777/andmx"
   },
   {
     "name": "zv-codec",
@@ -176,7 +176,7 @@
     "stargazers_count": 11,
     "forks_count": 0,
     "language": "Python",
-    "pushed_at": "2026-10-18T12:11:13Z",
+    "pushed_at": "2026-10-18T16:35:27Z",
     "html_url": "https://github.com/shiaho777/pyj-j"
   },
   {
