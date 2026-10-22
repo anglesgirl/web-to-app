@@ -2,10 +2,10 @@
   {
     "name": "WebToApp",
     "description": "Turn any website into an installable app across iOS, Android, Windows, macOS and Linux, and generate a sharing link.",
-    "stargazers_count": 160,
+    "stargazers_count": 162,
     "forks_count": 36,
     "language": "Python",
-    "pushed_at": "2026-10-17T05:43:34Z",
+    "pushed_at": "2026-10-22T03:34:28Z",
     "html_url": "https://github.com/shiaho777/WebToApp"
   },
   {
@@ -36,6 +36,15 @@
     "html_url": "https://github.com/shiaho777/LogSleuth"
   },
   {
+    "name": "qsyy",
+    "description": "汽水音乐第三方 Web 播放器 · 全端可用 · 本地缓存直读 / 在线播放 / 逐字歌词 / 音效 / 下载",
+    "stargazers_count": 21,
+    "forks_count": 0,
+    "language": "JavaScript",
+    "pushed_at": "2026-10-21T03:42:10Z",
+    "html_url": "https://github.com/shiaho777/qsyy"
+  },
+  {
     "name": "LuaXIDE",
     "description": "Android Lua IDE with built-in interpreter, visual UI designer, debugger, and APK builder — all on-device, no root required.",
     "stargazers_count": 21,
@@ -43,15 +52,6 @@
     "language": "Kotlin",
     "pushed_at": "2026-10-16T01:24:54Z",
     "html_url": "https://github.com/shiaho777/LuaXIDE"
-  },
-  {
-    "name": "qsyy",
-    "description": "汽水音乐第三方 Web 播放器 · 全端可用 · 本地缓存直读 / 在线播放 / 逐字歌词 / 音效 / 下载",
-    "stargazers_count": 20,
-    "forks_count": 0,
-    "language": "JavaScript",
-    "pushed_at": "2026-10-21T03:42:10Z",
-    "html_url": "https://github.com/shiaho777/qsyy"
   },
   {
     "name": "andmx",
@@ -111,7 +111,7 @@
     "name": "float-android",
     "description": "一部装在 Android 里的 AI 虚拟手机：拟真桌面、聊天、朋友圈、查手机、地图定位、语音/视频通话、日记日历。AI 角色有作息、日程、位置和长期记忆，会主动发消息、发帖互动。数据全在设备本地，联网只调你自己配置的 LLM/生图/语音 API。",
     "stargazers_count": 15,
-    "forks_count": 9,
+    "forks_count": 11,
     "language": "TypeScript",
     "pushed_at": "2026-10-10T07:06:10Z",
     "html_url": "https://github.com/shiaho777/float-android"
