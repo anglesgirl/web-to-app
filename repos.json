@@ -32,7 +32,7 @@
     "stargazers_count": 29,
     "forks_count": 2,
     "language": "Kotlin",
-    "pushed_at": "2026-10-20T15:45:28Z",
+    "pushed_at": "2026-10-22T13:48:05Z",
     "html_url": "https://github.com/shiaho777/LogSleuth"
   },
   {
@@ -167,7 +167,7 @@
     "stargazers_count": 12,
     "forks_count": 0,
     "language": "C",
-    "pushed_at": "2026-10-20T06:25:46Z",
+    "pushed_at": "2026-10-22T13:47:22Z",
     "html_url": "https://github.com/shiaho777/stratum"
   },
   {
@@ -176,7 +176,7 @@
     "stargazers_count": 11,
     "forks_count": 0,
     "language": "Python",
-    "pushed_at": "2026-10-21T22:12:57Z",
+    "pushed_at": "2026-10-22T22:08:34Z",
     "html_url": "https://github.com/shiaho777/pyj-j"
   },
   {
@@ -185,7 +185,7 @@
     "stargazers_count": 11,
     "forks_count": 1,
     "language": "TypeScript",
-    "pushed_at": "2026-10-07T03:40:00Z",
+    "pushed_at": "2026-10-22T14:58:39Z",
     "html_url": "https://github.com/shiaho777/browser-engine-shia"
   },
   {
@@ -259,6 +259,15 @@
     "language": "Kotlin",
     "pushed_at": "2026-10-17T09:08:28Z",
     "html_url": "https://github.com/shiaho777/BiliDesk"
+  },
+  {
+    "name": "repo-maintenance",
+    "description": "Agent skill for maintaining living App and AI repos. One claim per chat, so concurrent harnesses do not work the same project.",
+    "stargazers_count": 0,
+    "forks_count": 0,
+    "language": "Shell",
+    "pushed_at": "2026-10-22T14:38:07Z",
+    "html_url": "https://github.com/shiaho777/repo-maintenance"
   },
   {
     "name": "nixiang",
