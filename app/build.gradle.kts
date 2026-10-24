@@ -723,6 +723,26 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
 }
 
+// Conscrypt is a device-only dependency: its AAR bundles libconscrypt_jni.so
+// built for Android (Bionic), which cannot load on the JVM. Unit tests run on
+// the JVM with isIncludeAndroidResources = true, and Robolectric's Application
+// setup loads the "conscrypt_jni" library by name — with the AAR on the test
+// runtime classpath that load is attempted for real and fails with
+// UnsatisfiedLinkError in every Robolectric test (672 failures in CI run
+// 40068887574; upstream base ec8b6c06 was green), while without the AAR it
+// is a silent no-op. No unit test imports org.conscrypt classes directly
+// (TlsMitmBridgeTest only asserts the conscryptEchActive boolean), so keeping
+// the module out of the unit-test runtime classpath loses no coverage.
+// Production APKs (debug and release) and instrumented tests are untouched.
+configurations {
+    matching {
+        it.name.endsWith("RuntimeClasspath") &&
+            (it.name.startsWith("test") || it.name.contains("UnitTest"))
+    }.configureEach {
+        exclude(group = "org.conscrypt", module = "conscrypt-android")
+    }
+}
+
 /**
  * Resolves a Python 3 interpreter command for the current platform. Windows usually exposes
  * Python as `python` (or the `py -3` launcher) rather than `python3`, so a hardcoded
