@@ -152,3 +152,5 @@ jobs:
           path: app/build/outputs/apk/gplay/**/*.apk
           if-no-files-found: error
           retention-days: 14
+
+# CI registration nudge (fork): no functional change.
