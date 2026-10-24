@@ -102,7 +102,8 @@ object TlsUpstreamConnector {
         return TlsResult(sslSocket, negotiatedProtocol)
     }
 
-    private fun buildUpstreamTrustManager(anchors: List<X509Certificate>): X509TrustManager {
+    /** Shared with ConscryptEchForwarder: system CAs plus user-imported anchors. */
+    fun buildUpstreamTrustManager(anchors: List<X509Certificate>): X509TrustManager {
         val system = defaultTrustManager()
         if (anchors.isEmpty()) return system
         val custom = trustManagerForAnchors(anchors) ?: return system

@@ -200,6 +200,11 @@ android {
             // Cronet natives are injected into exported APKs by ApkBuilder when
             // 强制 HTTP/3 is enabled; the template never carries them.
             excludes += "**/libcronet*.so"
+
+            // Conscrypt natives (ECH upstream): the template never carries them
+            // either; without the .so the provider stays unregistered and the
+            // MITM bridge degrades to its classic relay.
+            excludes += "**/libconscrypt_jni.so"
         }
     }
     androidResources {
@@ -626,6 +631,12 @@ dependencies {
     // Forced HTTP/3 upstream (see app/build.gradle.kts): classes only, natives are
     // injected into exported APKs by ApkBuilder when 强制 HTTP/3 is enabled.
     implementation("org.chromium.net:cronet-embedded:143.7445.0")
+
+    // ECH upstream (see app/build.gradle.kts): classes only — the template
+    // excludes libconscrypt_jni.so below, so the Conscrypt provider never
+    // registers in generated APKs and the bridge stays on its classic relay
+    // until an export-time injection exists (Cronet precedent).
+    implementation("org.conscrypt:conscrypt-android:2.7.0")
 
     implementation("androidx.media:media:1.7.0")
 }

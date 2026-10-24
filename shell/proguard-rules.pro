@@ -275,3 +275,15 @@
 -keep class org.chromium.components.** { *; }
 -dontwarn org.chromium.**
 -keepdirectories META-INF/services/**
+
+# ============================================================
+# Conscrypt (ECH upstream)
+# ============================================================
+# Conscrypt's SSLParametersImpl reaches the ECH policy only by reflecting the
+# method NAME getNetworkSecurityPolicy() on ConscryptEchForwarder's trust
+# manager wrapper. Shell R8 renames com.webtoapp.** members, so pin this class
+# explicitly — a renamed method silently disables ECH. (Classes only in the
+# template: libconscrypt_jni.so is excluded from packaging, so the provider
+# stays unregistered in generated APKs until export-time injection exists.)
+-keep class com.webtoapp.core.webview.ConscryptEchForwarder$EchPolicyTrustManager { *; }
+-keep class org.conscrypt.** { *; }

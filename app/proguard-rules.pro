@@ -311,3 +311,14 @@
 -keep class org.chromium.components.** { *; }
 -dontwarn org.chromium.**
 -keepdirectories META-INF/services/**
+
+# ============================================================
+# Conscrypt (ECH upstream)
+# ============================================================
+# Conscrypt's SSLParametersImpl reaches the ECH policy only by reflecting
+# getNetworkSecurityPolicy() on the app's TrustManager wrapper
+# (ConscryptEchForwarder$EchPolicyTrustManager, already covered by the
+# com.webtoapp.** keep above). If that reflective path breaks,
+# Conscrypt.setEchConfigList is silently ignored and the ClientHello leaves
+# with a plaintext SNI — keep the whole Conscrypt API surface intact.
+-keep class org.conscrypt.** { *; }

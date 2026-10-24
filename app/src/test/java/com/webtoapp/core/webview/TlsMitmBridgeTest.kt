@@ -122,7 +122,7 @@ class TlsMitmBridgeTest {
 
         // Plain fingerprint spoofing stays on the classic raw relay.
         assertThat(TlsMitmBridge.Config(template = template).cronetActive).isFalse()
-        // Forced HTTP/3 and ECH both activate the Cronet upstream.
+        // Forced HTTP/3 and ECH both activate a request/response upstream engine.
         assertThat(TlsMitmBridge.Config(template = template, forceHttp3 = true).cronetActive).isTrue()
         assertThat(TlsMitmBridge.Config(template = template, echUpstream = true).cronetActive).isTrue()
         assertThat(
@@ -134,6 +134,32 @@ class TlsMitmBridgeTest {
         ).isFalse()
         assertThat(
             TlsMitmBridge.Config(template = template, echUpstream = true, upstreamSocks = socks).cronetActive
+        ).isFalse()
+    }
+
+    @Test
+    fun `conscrypt ech activation matrix`() {
+        val template = TlsFingerprintTemplate.CHROME_131
+        val socks = LocalHttpToSocksBridge.Upstream("127.0.0.1", 1080)
+
+        // ECH alone rides the Conscrypt leg.
+        assertThat(
+            TlsMitmBridge.Config(template = template, echUpstream = true).conscryptEchActive
+        ).isTrue()
+        // Forced HTTP/3 keeps priority: the Cronet leg serves the tunnel.
+        assertThat(
+            TlsMitmBridge.Config(template = template, forceHttp3 = true, echUpstream = true)
+                .conscryptEchActive
+        ).isFalse()
+        // No ECH, no Conscrypt leg.
+        assertThat(TlsMitmBridge.Config(template = template).conscryptEchActive).isFalse()
+        assertThat(
+            TlsMitmBridge.Config(template = template, forceHttp3 = true).conscryptEchActive
+        ).isFalse()
+        // A SOCKS upstream leaves the toggle inert, like the other engines.
+        assertThat(
+            TlsMitmBridge.Config(template = template, echUpstream = true, upstreamSocks = socks)
+                .conscryptEchActive
         ).isFalse()
     }
 

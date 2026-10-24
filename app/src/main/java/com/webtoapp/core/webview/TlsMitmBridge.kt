@@ -36,17 +36,28 @@ object TlsMitmBridge {
         val customCipherSuites: List<String> = emptyList(),
         val upstreamSocks: LocalHttpToSocksBridge.Upstream? = null,
         val forceHttp3: Boolean = false,
-        /** ECH on the system engine: the upstream leg is Cronet, whose Chromium stack
-         *  fetches HTTPS records and encrypts the ClientHello SNI natively (issue #721). */
-        val echUpstream: Boolean = false
+        /** ECH on the system engine (issue #721). The upstream leg depends on the
+         *  combination: forced HTTP/3 rides Cronet; ECH alone rides
+         *  [ConscryptEchForwarder], because Cronet's public API offers no way to
+         *  feed it a DoH endpoint, so its ECHConfig discovery degrades to plain
+         *  system DNS and silently never engages on filtered networks. */
+        val echUpstream: Boolean = false,
+        /** DoH endpoint (DnsConfig.effectiveDohUrl) the Conscrypt ECH leg resolves
+         *  HTTPS records and addresses through. Blank disables that leg. */
+        val echDohUrl: String = ""
     ) {
         /**
          * Both forced HTTP/3 and ECH ride the same MITM bridge as fingerprint spoofing,
-         * but their upstream leg is Cronet — which cannot chain through a SOCKS proxy.
-         * When the user configures a SOCKS upstream the bridge stays on the classic
-         * relay and both toggles are inert.
+         * but their upstream legs are request/response engines — which cannot chain
+         * through a SOCKS proxy. When the user configures a SOCKS upstream the bridge
+         * stays on the classic relay and both toggles are inert.
          */
         val cronetActive: Boolean get() = (forceHttp3 || echUpstream) && upstreamSocks == null
+
+        /** ECH without forced HTTP/3: the Conscrypt leg ([ConscryptEchForwarder])
+         *  serves the request loop instead of Cronet. */
+        val conscryptEchActive: Boolean
+            get() = echUpstream && !forceHttp3 && upstreamSocks == null
     }
 
     @Volatile private var serverSocket: ServerSocket? = null
@@ -132,8 +143,11 @@ object TlsMitmBridge {
             acceptThread = accept
             accept.start()
 
-            if (config.cronetActive && appContext != null) {
+            if (config.cronetActive && !config.conscryptEchActive && appContext != null) {
                 CronetForwarder.start(appContext, echUpstream = config.echUpstream)
+            }
+            if (config.conscryptEchActive && appContext != null) {
+                ConscryptEchForwarder.start(appContext, config.echDohUrl, customCaAnchors)
             }
 
             AppLogger.i(
@@ -173,6 +187,7 @@ object TlsMitmBridge {
         hostAllowlistEnforcement = true
         appContext = null
         try { CronetForwarder.stop() } catch (_: Throwable) {}
+        try { ConscryptEchForwarder.stop() } catch (_: Throwable) {}
     }
 
     private fun acceptLoop(socket: ServerSocket) {
@@ -272,6 +287,15 @@ object TlsMitmBridge {
             safeClose(client); return
         }
 
+        // ECH-only mode: the Conscrypt leg serves the tunnel. If it never became
+        // ready (no DoH endpoint, or the bundled Conscrypt provider is absent as
+        // in generated APKs whose template excludes its native library) degrade
+        // to the classic relay instead of failing every request with 502.
+        if (config.conscryptEchActive && ConscryptEchForwarder.isReady()) {
+            handleConnectEch(client, clientOut, host, port, config)
+            return
+        }
+
         // Missing Cronet (not yet downloaded / not embedded) degrades to the classic
         // relay instead of failing every request with 502.
         val cronetCtx = appContext
@@ -358,14 +382,7 @@ object TlsMitmBridge {
         return sslSocket
     }
 
-    /**
-     * Cronet upstream path (forced HTTP/3 and/or ECH): the bridge terminates TLS with
-     * the WebView speaking plain HTTP/1.1 only, then re-issues every request through
-     * Cronet — Chromium's own stack, QUIC-first when h3 forcing is on, ECH when the
-     * target publishes an HTTPS record. WebSocket upgrades and other non-plain-HTTP
-     * tunnels fall back to the classic raw relay. Cronet is a request/response engine,
-     * not a byte pump — this is the only part of the bridge that speaks HTTP.
-     */
+    /** Cronet upstream (forced HTTP/3, or HTTP/3 + ECH combined). */
     private fun handleConnectCronet(
         client: Socket,
         clientOut: OutputStream,
@@ -373,9 +390,76 @@ object TlsMitmBridge {
         port: Int,
         config: Config
     ) {
+        handleConnectViaEngine(client, clientOut, host, port, config, "h3") {
+            context, method, url, headers, body, sink, wantsClose, hintHost, hintPort ->
+            CronetForwarder.forward(
+                context = context,
+                method = method,
+                url = url,
+                headers = headers,
+                body = body,
+                sink = sink,
+                clientWantsClose = wantsClose,
+                hostForHint = hintHost,
+                portForHint = hintPort
+            )
+        }
+    }
+
+    /** Conscrypt ECH upstream (ECH without forced HTTP/3). */
+    private fun handleConnectEch(
+        client: Socket,
+        clientOut: OutputStream,
+        host: String,
+        port: Int,
+        config: Config
+    ) {
+        handleConnectViaEngine(client, clientOut, host, port, config, "ech") {
+            context, method, url, headers, body, sink, wantsClose, hintHost, hintPort ->
+            ConscryptEchForwarder.forward(
+                context = context,
+                method = method,
+                url = url,
+                headers = headers,
+                body = body,
+                sink = sink,
+                clientWantsClose = wantsClose,
+                hostForHint = hintHost,
+                portForHint = hintPort
+            )
+        }
+    }
+
+    /**
+     * Request/response-engine upstream path (forced HTTP/3 via Cronet, ECH via
+     * Conscrypt): the bridge terminates TLS with the WebView speaking plain
+     * HTTP/1.1 only, then re-issues every request through the engine. WebSocket
+     * upgrades and other non-plain-HTTP tunnels fall back to the classic raw
+     * relay. The engines are request/response only, not byte pumps — this is
+     * the only part of the bridge that speaks HTTP.
+     */
+    private fun handleConnectViaEngine(
+        client: Socket,
+        clientOut: OutputStream,
+        host: String,
+        port: Int,
+        config: Config,
+        engineLabel: String,
+        forwarder: (
+            context: android.content.Context,
+            method: String,
+            url: String,
+            headers: List<Pair<String, String>>,
+            body: ByteArray?,
+            sink: OutputStream,
+            clientWantsClose: Boolean,
+            hostForHint: String,
+            portForHint: Int
+        ) -> Boolean
+    ) {
         val context = appContext ?: run { safeClose(client); return }
 
-        AppLogger.d(TAG, "h3 CONNECT tunnel: $host:$port")
+        AppLogger.d(TAG, "$engineLabel CONNECT tunnel: $host:$port")
 
         // Answer the CONNECT before handshaking: clients that wait for the 200
         // before starting TLS (no ClientHello pipelining) would otherwise deadlock
@@ -479,20 +563,13 @@ object TlsMitmBridge {
                 }
 
                 val forwarded = try {
-                    CronetForwarder.forward(
-                        context = context,
-                        method = method,
-                        url = requestUrl,
-                        headers = filteredHeaders,
-                        body = body,
-                        sink = output,
-                        clientWantsClose = clientWantsClose,
-                        hostForHint = host,
-                        portForHint = port
+                    forwarder(
+                        context, method, requestUrl, filteredHeaders, body,
+                        output, clientWantsClose, host, port
                     )
                 } catch (e: java.io.IOException) {
                     // Client broke mid-response; nothing left to salvage.
-                    AppLogger.d(TAG, "h3 forward client I/O error for $host: ${e.message}")
+                    AppLogger.d(TAG, "$engineLabel forward client I/O error for $host: ${e.message}")
                     return
                 }
 
@@ -503,7 +580,7 @@ object TlsMitmBridge {
                 if (clientWantsClose) break
             }
         } catch (e: Exception) {
-            AppLogger.d(TAG, "h3 connect loop ended for $host: ${e.message}")
+            AppLogger.d(TAG, "$engineLabel connect loop ended for $host: ${e.message}")
         } finally {
             safeClose(mitmSocket)
         }

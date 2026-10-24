@@ -692,6 +692,14 @@ dependencies {
     // Version must match CronetDependencyManager.CRONET_ARTIFACT_VERSION.
     implementation("org.chromium.net:cronet-embedded:143.7445.0")
 
+    // ECH upstream for the system-WebView MITM bridge (ConscryptEchForwarder):
+    // 2.7.0 is the first Conscrypt release with a public ECH API
+    // (Conscrypt.setEchConfigList + EchRejectedException). Unlike Cronet, its
+    // native library IS bundled — there is no download/injection pipeline for
+    // it, and the bridge falls back to the classic relay when the provider is
+    // unavailable. Do not downgrade below 2.7.0: earlier AARs contain no ECH.
+    implementation("org.conscrypt:conscrypt-android:2.7.0")
+
     implementation("com.google.zxing:core:3.5.2")
 
     // Native Google sign-in through the Jetpack Credential Manager (NativeBridge).

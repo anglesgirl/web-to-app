@@ -1626,7 +1626,8 @@ class WebViewManager(
                     },
                     upstreamSocks = upstreamSocks,
                     forceHttp3 = config.forceHttp3,
-                    echUpstream = echUpstream
+                    echUpstream = echUpstream,
+                    echDohUrl = config.dnsConfig.effectiveDohUrl
                 ),
                 caDir = context.filesDir,
                 customCaAnchors = runCatching {
