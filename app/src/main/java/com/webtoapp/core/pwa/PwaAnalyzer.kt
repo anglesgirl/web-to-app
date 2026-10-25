@@ -2,6 +2,7 @@ package com.webtoapp.core.pwa
 
 import com.webtoapp.core.i18n.Strings
 import com.webtoapp.core.logging.AppLogger
+import com.webtoapp.data.model.DnsConfig
 import com.webtoapp.core.network.NetworkModule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -64,12 +65,21 @@ object PwaAnalyzer {
             .build()
     }
 
-    suspend fun analyze(url: String): PwaAnalysisResult = withContext(Dispatchers.IO) {
+    /**
+     * @param dnsConfig the in-progress app's DNS config (create-page edit
+     * state). When [DnsConfig.echEffective] is true, the HTML/manifest
+     * fetches go through [EchHttpFetcher] (DoH + Conscrypt ECH) instead of
+     * the plain OkHttp client — otherwise a filtered network blocks the
+     * analysis request itself with a plaintext SNI, and no ECH leg in the
+     * generated app can help because analysis never gets that far. When ECH
+     * is not configured, behavior is exactly today's plain fetch.
+     */
+    suspend fun analyze(url: String, dnsConfig: DnsConfig? = null): PwaAnalysisResult = withContext(Dispatchers.IO) {
         try {
             val normalizedUrl = normalizeUrl(url)
             AppLogger.i(TAG, "Starting PWA analysis for: $normalizedUrl")
 
-            val htmlResult = when (val response = downloadHtml(normalizedUrl)) {
+            val htmlResult = when (val response = downloadHtml(normalizedUrl, dnsConfig)) {
                 is FetchTextResult.Success -> response
                 is FetchTextResult.Failure -> {
                     AppLogger.w(TAG, "HTML download failed for $normalizedUrl: ${response.userMessage}")
@@ -86,11 +96,11 @@ object PwaAnalyzer {
             }
 
             val baseUrl = htmlResult.finalUrl
-            val manifestUrl = extractManifestUrl(html, baseUrl)
+            val manifestUrl = extractManifestUrl(html, baseUrl, dnsConfig)
             AppLogger.d(TAG, "Manifest URL: $manifestUrl")
 
             if (manifestUrl != null) {
-                when (val manifestResponse = downloadJson(manifestUrl)) {
+                when (val manifestResponse = downloadJson(manifestUrl, dnsConfig)) {
                     is FetchTextResult.Success -> {
                         val manifestJson = manifestResponse.body.trim()
                         if (manifestJson.startsWith("{")) {
@@ -156,21 +166,23 @@ object PwaAnalyzer {
         }
     }
 
-    private fun downloadHtml(url: String): FetchTextResult {
+    private fun downloadHtml(url: String, dnsConfig: DnsConfig? = null): FetchTextResult {
         return downloadText(
             url = url,
             accept = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             maxBytes = MAX_HTML_SIZE,
-            kind = RequestKind.DOCUMENT
+            kind = RequestKind.DOCUMENT,
+            dnsConfig = dnsConfig
         )
     }
 
-    private fun downloadJson(url: String): FetchTextResult {
+    private fun downloadJson(url: String, dnsConfig: DnsConfig? = null): FetchTextResult {
         return downloadText(
             url = url,
             accept = "application/manifest+json,application/json,text/plain,*/*",
             maxBytes = MAX_JSON_SIZE,
-            kind = RequestKind.MANIFEST
+            kind = RequestKind.MANIFEST,
+            dnsConfig = dnsConfig
         )
     }
 
@@ -178,8 +190,17 @@ object PwaAnalyzer {
         url: String,
         accept: String,
         maxBytes: Int,
-        kind: RequestKind
+        kind: RequestKind,
+        dnsConfig: DnsConfig? = null
     ): FetchTextResult {
+        // ECH leg first when configured: a published ECHConfig means the
+        // fetch either succeeds hidden or fails outright (REQUIRED policy —
+        // an ECH failure never falls back to a plaintext SNI). Only when the
+        // host publishes no config (or DoH is unreachable) does the plain
+        // OkHttp path below run, exactly as before.
+        if (dnsConfig?.echEffective == true) {
+            fetchTextViaEch(url, accept, maxBytes, kind, dnsConfig.effectiveDohUrl)?.let { return it }
+        }
         return try {
             val request = Request.Builder()
                 .url(url)
@@ -211,6 +232,62 @@ object PwaAnalyzer {
             val userMessage = buildExceptionMessage(e, kind, url)
             AppLogger.e(TAG, "${kind.name} request failed for $url: $userMessage", e)
             FetchTextResult.Failure(userMessage = userMessage)
+        }
+    }
+
+    /**
+     * Fetches one document through the ECH leg. Returns null only when the
+     * ECH leg is not applicable (host publishes no ECHConfig, or DoH is
+     * unreachable) so the caller falls through to the plain OkHttp path. Any
+     * other outcome — success, HTTP error, or ECH failure — is authoritative
+     * and returned as-is, never downgraded to a plaintext fetch.
+     */
+    private fun fetchTextViaEch(
+        url: String,
+        accept: String,
+        maxBytes: Int,
+        kind: RequestKind,
+        dohUrl: String
+    ): FetchTextResult? {
+        return try {
+            val headers = listOf(
+                "Accept" to accept,
+                "Sec-Fetch-Dest" to if (kind == RequestKind.DOCUMENT) "document" else "empty",
+                "Sec-Fetch-Mode" to if (kind == RequestKind.DOCUMENT) "navigate" else "cors",
+                "Sec-Fetch-Site" to "none",
+                "User-Agent" to ANALYZER_USER_AGENT,
+                "Accept-Language" to ACCEPT_LANGUAGE,
+                "Cache-Control" to "no-cache",
+                "Pragma" to "no-cache"
+            )
+            when (val result = EchHttpFetcher.fetch(url, dohUrl, headers)) {
+                is EchHttpFetcher.Result.NotApplicable -> null
+                is EchHttpFetcher.Result.Failed -> {
+                    AppLogger.w(TAG, "${kind.name} ECH request failed for $url: ${result.message}")
+                    FetchTextResult.Failure(userMessage = result.message)
+                }
+                is EchHttpFetcher.Result.Success -> {
+                    if (result.statusCode !in 200..299) {
+                        val userMessage = buildHttpErrorMessage(result.statusCode, kind)
+                        AppLogger.w(TAG, "${kind.name} ECH request failed: HTTP ${result.statusCode} from $url")
+                        FetchTextResult.Failure(userMessage = userMessage, statusCode = result.statusCode)
+                    } else {
+                        val charset = result.headers
+                            .firstOrNull { it.first.equals("content-type", ignoreCase = true) }
+                            ?.second?.substringAfter("charset=", "")
+                            ?.substringBefore(";")?.trim()?.takeIf { it.isNotEmpty() }
+                            ?.let { runCatching { charset(it) }.getOrNull() }
+                            ?: Charsets.UTF_8
+                        val content = result.body.copyOf(minOf(result.body.size, maxBytes)).toString(charset)
+                        FetchTextResult.Success(body = content, finalUrl = url)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // Defensive: an unexpected failure inside the ECH leg must not
+            // take down analysis — fall through to the plain path.
+            AppLogger.e(TAG, "${kind.name} ECH request errored for $url, falling back to plain fetch", e)
+            null
         }
     }
 
@@ -269,7 +346,7 @@ object PwaAnalyzer {
         }
     }
 
-    private fun extractManifestUrl(html: String, baseUrl: String): String? {
+    private fun extractManifestUrl(html: String, baseUrl: String, dnsConfig: DnsConfig? = null): String? {
         val patterns = listOf(
             """<link\s+[^>]*rel\s*=\s*["']manifest["'][^>]*href\s*=\s*["']([^"']+)["'][^>]*/?>""".toRegex(RegexOption.IGNORE_CASE),
             """<link\s+[^>]*href\s*=\s*["']([^"']+)["'][^>]*rel\s*=\s*["']manifest["'][^>]*/?>""".toRegex(RegexOption.IGNORE_CASE)
@@ -289,7 +366,7 @@ object PwaAnalyzer {
         )
         for (path in commonPaths) {
             val candidateUrl = resolveUrl(baseUrl, path)
-            val json = downloadJson(candidateUrl)
+            val json = downloadJson(candidateUrl, dnsConfig)
             if (json is FetchTextResult.Success && json.body.trim().startsWith("{")) {
                 return candidateUrl
             }

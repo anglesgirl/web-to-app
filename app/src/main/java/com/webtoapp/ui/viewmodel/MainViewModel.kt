@@ -285,7 +285,7 @@ class MainViewModel(
         viewModelScope.launch {
             _pwaAnalysisState.value = PwaAnalysisState.Analyzing
             try {
-                val result = PwaAnalyzer.analyze(url)
+                val result = PwaAnalyzer.analyze(url, _editState.value.webViewConfig.dnsConfig)
                 _pwaAnalysisState.value = if (result.errorMessage != null) {
                     PwaAnalysisState.Error(result.errorMessage)
                 } else {
@@ -311,8 +311,9 @@ class MainViewModel(
 
             result.suggestedIconUrl?.let { iconUrl ->
                 try {
+                    val dnsConfig = _editState.value.webViewConfig.dnsConfig
                     val savedPath = withContext(Dispatchers.IO) {
-                        downloadAndSaveIcon(iconUrl)
+                        downloadAndSaveIcon(iconUrl, dnsConfig)
                     }
                     if (savedPath != null) {
                         updateEditState { copy(savedIconPath = savedPath, iconUri = null) }
@@ -398,7 +399,37 @@ class MainViewModel(
         _pwaAnalysisState.value = PwaAnalysisState.Idle
     }
 
-    private fun downloadAndSaveIcon(iconUrl: String): String? {
+    private fun downloadAndSaveIcon(iconUrl: String, dnsConfig: DnsConfig? = null): String? {
+        // Same ECH policy as analysis: when the app's DNS config has ECH
+        // effective, the icon fetch rides the ECH leg too — otherwise a
+        // filtered network yields a name without an icon for exactly the
+        // sites analysis just succeeded on. An ECH failure returns null
+        // without a plaintext retry; no published config falls through to
+        // the plain connection below.
+        if (dnsConfig?.echEffective == true) {
+            when (val ech = com.webtoapp.core.pwa.EchHttpFetcher.fetch(
+                iconUrl,
+                dnsConfig.effectiveDohUrl,
+                listOf("User-Agent" to "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36")
+            )) {
+                is com.webtoapp.core.pwa.EchHttpFetcher.Result.Success -> {
+                    if (ech.statusCode !in 200..299) return null
+                    return try {
+                        val bitmap = com.webtoapp.util.BoundedBitmaps.decodeBoundedBitmapStream(
+                            java.io.ByteArrayInputStream(ech.body)
+                        ) ?: return null
+                        IconStorage.saveIconFromBitmap(getApplication(), bitmap)
+                    } catch (e: Exception) {
+                        AppLogger.e("MainViewModel", "Icon download failed: ${e.message}")
+                        null
+                    }
+                }
+                is com.webtoapp.core.pwa.EchHttpFetcher.Result.Failed -> return null
+                is com.webtoapp.core.pwa.EchHttpFetcher.Result.NotApplicable -> {
+                    // Fall through to the plain connection below.
+                }
+            }
+        }
         return try {
             val conn = URL(iconUrl).openConnection() as HttpURLConnection
             conn.connectTimeout = 10_000
