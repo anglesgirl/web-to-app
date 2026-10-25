@@ -85,6 +85,7 @@ object EchHttpFetcher {
         }
         var currentUrl = url.toHttpUrlOrNull() ?: return Result.NotApplicable
         if (!currentUrl.isHttps) return Result.NotApplicable
+        AppLogger.i(TAG, "ECH fetch start host=${currentUrl.host} doh=${dohUrl.take(64)}")
 
         repeat(MAX_REDIRECTS + 1) {
             val host = currentUrl.host
@@ -93,9 +94,18 @@ object EchHttpFetcher {
             val echConfigList = records.echConfigList
             if (echConfigList == null) {
                 // No published config (or DoH unreachable): ECH cannot run.
-                AppLogger.d(TAG, "ECH fetch not applicable for $host (no ECHConfig)")
+                AppLogger.i(
+                    TAG,
+                    "ECH fetch not applicable for $host: no ECHConfig " +
+                        "(resolvedViaDoh=${records.resolvedViaDoh}, addresses=${records.addresses.size})"
+                )
                 return Result.NotApplicable
             }
+            AppLogger.i(
+                TAG,
+                "ECH resolve host=$host echPresent=true addresses=${records.addresses.size} " +
+                    "resolvedViaDoh=${records.resolvedViaDoh}"
+            )
             val addresses = records.addresses.ifEmpty {
                 try {
                     InetAddress.getAllByName(host).toList()
@@ -129,10 +139,12 @@ object EchHttpFetcher {
                 return Result.Failed("无法访问网站，目标站点可能拒绝了自动分析请求")
             } ?: return Result.Failed("无法访问网站，目标站点可能拒绝了自动分析请求")
 
+            AppLogger.i(TAG, "ECH fetch response host=$host status=${parsed.statusCode}")
             if (parsed.statusCode in listOf(301, 302, 303, 307, 308)) {
                 val location = HttpResponseParser.headerValue(parsed.headers, "location")
                 val next = location?.let { currentUrl.resolve(it) }
                 if (next != null && next.isHttps) {
+                    AppLogger.i(TAG, "ECH fetch redirect host=$host -> ${next.host}")
                     currentUrl = next
                     return@repeat
                 }
@@ -183,7 +195,7 @@ object EchHttpFetcher {
                     try { sslSocket.close() } catch (_: Exception) {}
                     throw IOException("ECH fetch: certificate does not match host '$host'")
                 }
-                AppLogger.d(TAG, "ECH fetch connected: $host via $address")
+                AppLogger.i(TAG, "ECH fetch connected: $host via $address")
                 return sslSocket
             } catch (e: EchRejectedException) {
                 try { raw.close() } catch (_: Exception) {}

@@ -292,17 +292,27 @@ object TlsMitmBridge {
         // in generated APKs whose template excludes its native library) degrade
         // to the classic relay instead of failing every request with 502.
         if (config.conscryptEchActive && ConscryptEchForwarder.isReady()) {
+            AppLogger.i(TAG, "CONNECT $host via Conscrypt ECH leg")
             handleConnectEch(client, clientOut, host, port, config)
             return
+        }
+        if (config.conscryptEchActive) {
+            AppLogger.i(
+                TAG,
+                "CONNECT $host: Conscrypt ECH leg not ready " +
+                    "(echDohUrl blank or provider missing), falling through"
+            )
         }
 
         // Missing Cronet (not yet downloaded / not embedded) degrades to the classic
         // relay instead of failing every request with 502.
         val cronetCtx = appContext
         if (config.cronetActive && cronetCtx != null && CronetForwarder.isReady(cronetCtx)) {
+            AppLogger.i(TAG, "CONNECT $host via Cronet leg")
             handleConnectCronet(client, clientOut, host, port, config)
             return
         }
+        AppLogger.i(TAG, "CONNECT $host via classic relay (ECH inactive/unready, Cronet inactive/unready)")
 
         // Handshake with the WebView FIRST and remember which ALPN protocol it picked,
         // so the upstream connection can be restricted to the same protocol. The bridge

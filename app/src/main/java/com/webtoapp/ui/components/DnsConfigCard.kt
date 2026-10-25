@@ -66,8 +66,8 @@ fun DnsConfigCard(
             return
         }
         // ECH works on both engines now: GeckoView via TRR + its own ECH prefs, the
-        // system engine via the MITM bridge's Cronet upstream (Chromium fetches HTTPS
-        // records and encrypts the ClientHello SNI itself). DoH is still preferred.
+        // system engine via the MITM bridge's Conscrypt upstream (DoH-fetched
+        // ECHConfig, REQUIRED policy). DoH is still preferred.
         if (dnsMode == "SYSTEM") onDnsModeChange("DOH")
         onDnsConfigChange(dnsConfig.copy(echEnabled = true))
     }

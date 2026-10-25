@@ -285,7 +285,14 @@ class MainViewModel(
         viewModelScope.launch {
             _pwaAnalysisState.value = PwaAnalysisState.Analyzing
             try {
-                val result = PwaAnalyzer.analyze(url, _editState.value.webViewConfig.dnsConfig)
+                val dnsConfig = _editState.value.webViewConfig.dnsConfig
+                AppLogger.i(
+                    "MainViewModel",
+                    "ECH-ANALYSIS analyzePwa url=$url echEnabled=${dnsConfig.echEnabled} " +
+                        "provider=${dnsConfig.provider} dohUrl=${dnsConfig.effectiveDohUrl.take(64)} " +
+                        "echEffective=${dnsConfig.echEffective}"
+                )
+                val result = PwaAnalyzer.analyze(url, dnsConfig)
                 _pwaAnalysisState.value = if (result.errorMessage != null) {
                     PwaAnalysisState.Error(result.errorMessage)
                 } else {
@@ -407,6 +414,7 @@ class MainViewModel(
         // without a plaintext retry; no published config falls through to
         // the plain connection below.
         if (dnsConfig?.echEffective == true) {
+            AppLogger.i("MainViewModel", "ECH-ANALYSIS icon download via ECH: $iconUrl")
             when (val ech = com.webtoapp.core.pwa.EchHttpFetcher.fetch(
                 iconUrl,
                 dnsConfig.effectiveDohUrl,
@@ -424,8 +432,12 @@ class MainViewModel(
                         null
                     }
                 }
-                is com.webtoapp.core.pwa.EchHttpFetcher.Result.Failed -> return null
+                is com.webtoapp.core.pwa.EchHttpFetcher.Result.Failed -> {
+                    AppLogger.w("MainViewModel", "ECH-ANALYSIS icon download ECH failed, no plaintext retry")
+                    return null
+                }
                 is com.webtoapp.core.pwa.EchHttpFetcher.Result.NotApplicable -> {
+                    AppLogger.i("MainViewModel", "ECH-ANALYSIS icon download ECH not applicable, plain fetch follows")
                     // Fall through to the plain connection below.
                 }
             }

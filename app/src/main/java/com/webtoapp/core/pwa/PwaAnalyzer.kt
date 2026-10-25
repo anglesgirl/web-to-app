@@ -78,6 +78,16 @@ object PwaAnalyzer {
         try {
             val normalizedUrl = normalizeUrl(url)
             AppLogger.i(TAG, "Starting PWA analysis for: $normalizedUrl")
+            if (dnsConfig != null) {
+                AppLogger.i(
+                    TAG,
+                    "ECH-ANALYSIS config host=${extractHost(normalizedUrl)} " +
+                        "echEnabled=${dnsConfig.echEnabled} provider=${dnsConfig.provider} " +
+                        "dohUrl=${dnsConfig.effectiveDohUrl.take(64)} echEffective=${dnsConfig.echEffective}"
+                )
+            } else {
+                AppLogger.i(TAG, "ECH-ANALYSIS config: none (plain fetch)")
+            }
 
             val htmlResult = when (val response = downloadHtml(normalizedUrl, dnsConfig)) {
                 is FetchTextResult.Success -> response
@@ -199,7 +209,12 @@ object PwaAnalyzer {
         // host publishes no config (or DoH is unreachable) does the plain
         // OkHttp path below run, exactly as before.
         if (dnsConfig?.echEffective == true) {
-            fetchTextViaEch(url, accept, maxBytes, kind, dnsConfig.effectiveDohUrl)?.let { return it }
+            val echResult = fetchTextViaEch(url, accept, maxBytes, kind, dnsConfig.effectiveDohUrl)
+            if (echResult != null) return echResult
+            AppLogger.i(
+                TAG,
+                "ECH-ANALYSIS ${extractHost(url) ?: url}: ECH not applicable, plain fetch follows"
+            )
         }
         return try {
             val request = Request.Builder()
@@ -263,7 +278,11 @@ object PwaAnalyzer {
             when (val result = EchHttpFetcher.fetch(url, dohUrl, headers)) {
                 is EchHttpFetcher.Result.NotApplicable -> null
                 is EchHttpFetcher.Result.Failed -> {
-                    AppLogger.w(TAG, "${kind.name} ECH request failed for $url: ${result.message}")
+                    AppLogger.w(
+                        TAG,
+                        "${kind.name} ECH request failed for $url: ${result.message} " +
+                            "(echRejected=${result.echRejected})"
+                    )
                     FetchTextResult.Failure(userMessage = result.message)
                 }
                 is EchHttpFetcher.Result.Success -> {

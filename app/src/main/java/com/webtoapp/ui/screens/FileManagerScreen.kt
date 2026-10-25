@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.webtoapp.core.apkbuilder.ApkBuilder
 import com.webtoapp.core.i18n.Strings
+import com.webtoapp.core.logging.AppLogger
 import com.webtoapp.ui.components.formatFileSize
 import com.webtoapp.ui.design.WtaAlertDialog
 import com.webtoapp.ui.design.WtaButton
@@ -495,6 +496,10 @@ fun FileManagerScreen(onBack: () -> Unit) {
                                     logTruncated = false
                                     scope.launch {
                                         val (text, truncated) = withContext(Dispatchers.IO) {
+                                            // Flush first: AppLogger buffers up to 3s, so
+                                            // without this the lines just written by a
+                                            // failed analysis may not be in the file yet.
+                                            AppLogger.flush()
                                             readLogPreview(entry.file)
                                         }
                                         logContent = text
@@ -1057,20 +1062,22 @@ private fun clearSection(context: Context, section: FileSection) {
 private fun readLogPreview(file: File): Pair<String, Boolean> {
     if (!file.exists() || !file.isFile) return "" to false
     return runCatching {
-        file.bufferedReader().use { reader ->
-            val sb = StringBuilder()
-            var truncated = false
-            while (true) {
-                val line = reader.readLine() ?: break
-                if (sb.length + line.length + 1 > MAX_LOG_CHARS) {
-                    truncated = true
-                    break
-                }
-                if (sb.isNotEmpty()) sb.append('\n')
-                sb.append(line)
+        // Show the TAIL, not the head: diagnostics live at the end of the
+        // file (the latest run), and the old head-first preview cut them off
+        // once the file grew past MAX_LOG_CHARS.
+        val lines = file.readLines()
+        val tail = mutableListOf<String>()
+        var totalChars = 0
+        var truncated = false
+        for (line in lines.asReversed()) {
+            if (totalChars + line.length + 1 > MAX_LOG_CHARS) {
+                truncated = true
+                break
             }
-            sb.toString() to truncated
+            tail += line
+            totalChars += line.length + 1
         }
+        tail.asReversed().joinToString("\n") to truncated
     }.getOrDefault("" to false)
 }
 
